@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>File Upload and 3D Model Viewer</title>
+    <link
+      href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css"
+      rel="stylesheet"
+    />
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"></script>
+    <script
+      src="https://cdn.jsdelivr.net/gh/jscastro76/threebox@v.2.2.2/dist/threebox.min.js"
+      type="text/javascript"
+    ></script>
+    <link
+      href="https://cdn.jsdelivr.net/gh/jscastro76/threebox@v.2.2.2/dist/threebox.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f0f0f5;
+      }
+      #map {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+      }
+      .container {
+        max-width: 800px;
+        margin: auto;
+        padding: 20px;
+        position: relative; /* Make container relative for absolute positioning of map */
+        z-index: 1; /* Ensure it appears above the map */
+      }
+      h1 {
+        color: #333;
+        margin-bottom: 10px;
+      }
+      input[type="file"],
+      input[type="text"],
+      button {
+        margin: 10px 0;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        width: 100%;
+        max-width: 300px;
+      }
+      button {
+        background-color: #4caf50;
+        color: white;
+        cursor: pointer;
+      }
+      button:hover {
+        background-color: #45a049;
+      }
+      table {
+        width: 100%;
+        max-width: 600px;
+        margin-top: 20px;
+        border-collapse: collapse;
+        background-color: white;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      }
+      th,
+      td {
+        padding: 12px;
+        border: 1px solid #ddd;
+        text-align: left;
+      }
+      th {
+        background-color: #f2f2f2;
+      }
+      tbody tr:nth-child(even) {
+        background-color: #f9f9f9;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <div class="container">
+      <h1>Upload a File</h1>
+      <input type="file" name="file" id="file" />
+      <button type="submit" id="btn">Upload</button>
+
+      <div>
+        <h1>Uploaded Files</h1>
+        <table id="files">
+          <thead>
+            <tr>
+              <th>File Name</th>
+              <th>File Path</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <!-- Files will be dynamically added here -->
+          </tbody>
+        </table>
+      </div>
+
+      <div>
+        <h1>Retrieve a File</h1>
+        <input type="text" name="path" id="path" placeholder="Enter path" />
+        <input
+          type="text"
+          name="filename"
+          id="filename"
+          placeholder="Enter filename"
+        />
+        <button type="submit" id="getFile">Get</button>
+      </div>
+    </div>
+  <!-- Include CryptoJS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+
+    <script >
+      // Initialize Mapbox
+      mapboxgl.accessToken =
+        "pk.eyJ1Ijoic2hpdmFtMTIxMTIyIiwiYSI6ImNtMTRtMHBoeTFnMGMybHIzOWhsbnhlbzEifQ.WSsC7A1tnxGS8_CaJ9FFag";
+      const map = new mapboxgl.Map({
+        container: "map",
+        style: "mapbox://styles/mapbox/light-v11",
+        center: { lng: -73.97627, lat: 40.75155 },
+        zoom: 15.4,
+        pitch: 64.9,
+        bearing: 172.5,
+        antialias: true,
+      });
+
+      const tb = (window.tb = new Threebox(
+        map,
+        map.getCanvas().getContext("webgl"),
+        {
+          defaultLights: true,
+        }
+      ));
+      
+      // File upload functionality
+      const btn = document.getElementById("btn");
+      const fileInput = document.getElementById("file");
+
+      btn.addEventListener("click", () => {
+        const formData = new FormData();
+        const file = fileInput.files[0];
+
+        if (!file) {
+          alert("Please select a file to upload.");
+          return;
+        }
+
+        formData.append("file", file);
+
+        fetch("/upload", {
+          method: "POST",
+          body: formData,
+        })
+          .then((res) => res.json())
+          .then((response) => {
+            console.log(response);
+            alert(response.message);
+            loadFiles(); // Reload table after upload
+          })
+          .catch((error) => console.error("Error uploading file:", error));
+      });
+
+      // Fetch and display uploaded files
+      function loadFiles() {
+        fetch("/data")
+          .then((res) => res.json())
+          .then((data) => {
+            const tbody = document.getElementById("tbody");
+            tbody.innerHTML = ""; // Clear table before populating
+
+            data.forEach((file) => {
+              const tr = document.createElement("tr");
+              const td1 = document.createElement("td");
+              const td2 = document.createElement("td");
+
+              td1.textContent = file.filename;
+              td2.textContent = file.path; // Use correct key 'path'
+
+              tr.appendChild(td1);
+              tr.appendChild(td2);
+              tbody.appendChild(tr);
+            });
+          })
+          .catch((error) => console.error("Error fetching files:", error));
+      }
+
+      // Load files on page load
+      document.addEventListener("DOMContentLoaded", loadFiles);
+
+      // Retrieve file from the server
+      const getFileBtn = document.getElementById("getFile");
+      const pathInput = document.getElementById("path");
+      const filenameInput = document.getElementById("filename");
+
+      getFileBtn.addEventListener("click", () => {
+        const path = pathInput.value.trim();
+        const filename = filenameInput.value.trim();
+
+        if (!filename) {
+          alert("Please enter both path and filename.");
+          return;
+        }
+
+        // Use consistent query parameters (path and filename)
+        fetch(
+          `/getFile?path=${encodeURIComponent(
+            path
+          )}&filename=${encodeURIComponent(filename)}`,
+          {
+            method: "POST",
+          }
+        )
+          .then((res) => {
+            if (!res.ok) {
+              return res.json().then((data) => {
+                throw new Error(data.error || "An error occurred.");
+              });
+            }
+            return res.json(); // Get the file as a blob
+          })
+          .then((data) => {
+            console.log(data);
+            const filename = data.filename;
+            const base64Data = data.data;
+            const decryptedData = decrypt(base64Data, 'shivam');
+            console.log(decryptedData);
+            const blob = base64ToBlob(decryptedData, "image/webp");
+            console.log(blob);
+            const url = URL.createObjectURL(blob);
+            console.log(url);
+            // debugger;
+            map.addLayer({
+              id: "custom-threebox-model",
+              type: "custom",
+              renderingMode: "3d",
+              onAdd: function () {
+                const scale = 3.2;
+                const options = {
+                  // obj: 'https://docs.mapbox.com/mapbox-gl-js/assets/metlife-building.gltf',
+                  obj: decryptedData,
+                  type: "glb",
+                  scale: { x: scale, y: scale, z: 2.7 },
+                  units: "meters",
+                  rotation: { x: 90, y: -90, z: 0 },
+                };
+
+                tb.loadObj(options, (model) => {
+                  model.setCoords([-73.976799, 40.754145]);
+                  model.setRotation({ x: 0, y: 0, z: 241 });
+                  tb.add(model);
+                });
+              },
+
+              render: function () {
+                tb.update();
+              },
+            });
+          })
+          .catch((error) => {
+            console.error("Error retrieving file:", error);
+            alert("Error: " + error.message);
+          });
+      });
+
+      function base64ToBlob(base64Data, contentType) {
+        const byteCharacters = atob(base64Data); // Decode base64 string
+        const byteNumbers = new Array(byteCharacters.length)
+          .fill()
+          .map((_, i) => byteCharacters.charCodeAt(i));
+        const byteArray = new Uint8Array(byteNumbers);
+
+        return new Blob([byteArray], { type: contentType }); // Create a Blob from the byte array
+      }
+      
+     
+      const decrypt = (text, secretKey) => {
+  const bytes = CryptoJS.AES.decrypt(text, secretKey);
+  const originalText = bytes.toString(CryptoJS.enc.Utf8);
+  return originalText;
+};
+
+    </script>
+  
+  </body>
+</html>
